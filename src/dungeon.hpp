@@ -195,15 +195,15 @@ class Dungeon {
         uniform_int_distribution<int> roll (a,b-1);
         int loc = roll(rng);
 
-        auto  first_ptr =  first_data[loc-lat_begin];
-        auto second_ptr = second_data[loc-lat_begin];
+        auto  first_ptr =  first_data[loc];
+        auto second_ptr = second_data[loc];
 
         Space space;
         HallData hd;
 
         space.type = SpaceType::HALL;
         hd.dir = dir;
-        hd.dir_loc = loc;
+        hd.dir_loc = loc + lat_begin;
         hd.begin = get_shape(*first_ptr).end_longitude(dir);
         hd.end = get_shape(*second_ptr).begin_longitude(dir);
         space.data.hall = hd;
@@ -258,9 +258,7 @@ class Dungeon {
                 int(area_size * room_ratio_min));
             rv.begin = begin + rv.min;
             rv.end = end - rv.min + 1;
-            rv.range = max(
-                rv.end - rv.begin,
-                0);
+            rv.range = rv.end - rv.begin;
             return rv;
         };
 
@@ -337,7 +335,7 @@ class Dungeon {
         ) {
             uniform_int_distribution<int> roll_lat_len (
                 min_lat,
-                max_lat);
+                min(max_lat, int(max_long/room_ratio_min)));
 
             const int lat_len = roll_lat_len(rng);
             const int lat_pos = center_lat - lat_len/2;
@@ -388,6 +386,10 @@ class Dungeon {
 public:
 
     void go(int w, int h) {
+        if (w <= room_width_min || h <= room_width_min) {
+			throw logic_error("Dungeon::go(): Dungeon is too small to create any rooms!");
+		}
+
         width = w;
         height = h;
 

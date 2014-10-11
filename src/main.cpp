@@ -108,9 +108,19 @@ struct DungeonTests {
 
 int main() {
     DungeonTests tests;
-    if (tests.run_all_tests()) {
-        Dungeon dung;
-        dung.go(30,30);
-        dung.print(cout);
-    }
+	if (tests.run_all_tests()) {
+		Dungeon dung;
+		for (int w = 4; w < 300; ++w){
+			cout << w << endl;
+			cout << "                               |\r";
+			cout << "|";
+			for (int h = 4; h < 300; ++h){
+				if ((h - 4) % 10 == 0) {
+					cout << ".";
+				}
+				dung.go(w, h);
+			}
+			cout << endl;
+		}
+	}
 }
