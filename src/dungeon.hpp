@@ -50,8 +50,8 @@ inline Dir flip(Dir dir) {
 
 struct Rect {
     int begin_r;
-    int begin_c;
     int end_r;
+    int begin_c;
     int end_c;
 
     int width() const {
@@ -120,7 +120,7 @@ struct Space {
     vector<Space*> neighbors;
 };
 
-Rect get_shape(Space const& sp) {
+inline Rect get_shape(Space const& sp) {
     Rect rv;
 
     switch (sp.type) {
@@ -129,21 +129,11 @@ Rect get_shape(Space const& sp) {
         } break;
 
         case SpaceType::HALL: {
-            switch (sp.data.hall.dir) {
-                case Dir::HORIZ: {
-                    rv.begin_r = sp.data.hall.begin;
-                    rv.end_r = sp.data.hall.end;
-                    rv.begin_c = sp.data.hall.dir_loc;
-                    rv.end_c = sp.data.hall.dir_loc + 1;
-                } break;
-
-                case Dir::VERT: {
-                    rv.begin_r = sp.data.hall.dir_loc;
-                    rv.end_r = sp.data.hall.dir_loc + 1;
-                    rv.begin_c = sp.data.hall.begin;
-                    rv.end_c = sp.data.hall.end;
-                } break;
-            }
+            Dir dir = sp.data.hall.dir;
+            rv.begin_longitude(dir) = sp.data.hall.begin;
+            rv.end_longitude(dir) = sp.data.hall.end;
+            rv.begin_latitude(dir) = sp.data.hall.dir_loc;
+            rv.end_latitude(dir) = sp.data.hall.dir_loc+1;
         } break;
 
         case SpaceType::NONE: {
