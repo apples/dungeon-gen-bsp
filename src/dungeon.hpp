@@ -159,6 +159,22 @@ vector<Space*> get_partition_data(SpaceVec& spaces, Dir dir, int lat_begin, int 
     return rv;
 }
 
+#ifdef __MINGW32__
+    #include <chrono>
+    inline auto nd_rand()
+    {
+        auto now = std::chrono::high_resolution_clock::now();
+        auto past = now.time_since_epoch();
+        return past.count();
+    }
+#else
+    #include <random>
+    inline auto nd_rand()
+    {
+        return std::random_device{}();
+    }
+#endif // __MINGW32__
+
 class Dungeon {
     friend class DungeonTests;
 
@@ -173,7 +189,7 @@ class Dungeon {
 
     int depth_max = 5;
 
-    mt19937 rng {random_device{}()};
+    mt19937 rng {nd_rand()};
 
     Space* carve_hallway(vector<Space*> const& first, vector<Space*> const& second, Dir dir, int lat_begin, int lat_end) {
         Space* rv;
@@ -404,11 +420,15 @@ public:
         for (Space& s : rooms) {
             Space* sp = &s;
             auto rect = get_shape(s);
-            out << "    " << intptr_t(sp) << " [label=\""
-                << (s.type==SpaceType::ROOM? "Room " : "Hall ")
-                << rect.begin_r << "-" << rect.end_r << ":"
-                << rect.begin_c << "-" << rect.end_c
-                << "\"];" << endl;
+            out << "    " << intptr_t(sp) << " ["
+                << "label=\""
+                    << (s.type==SpaceType::ROOM? "Room " : "Hall ")
+                    << rect.begin_r << "-" << rect.end_r << ":"
+                    << rect.begin_c << "-" << rect.end_c << "\" "
+                << "pos=\""
+                    << ((rect.begin_c+rect.end_c)*72/2) << ","
+                    << ((rect.begin_r+rect.end_r)*72/2) << "\" "
+                << "];" << endl;
             for (Space* sp2 : s.neighbors) {
                 if (less<void>{}(sp, sp2)) {
                     out << "    " << intptr_t(sp) << " -- " << intptr_t(sp2) << ";" << endl;
@@ -416,5 +436,17 @@ public:
             }
         }
         out << "}" << endl;
+    }
+
+    int num_cols() const {
+        return width;
+    }
+
+    int num_rows() const {
+        return height;
+    }
+
+    list<Space> const& get_spaces() const {
+        return rooms;
     }
 };
