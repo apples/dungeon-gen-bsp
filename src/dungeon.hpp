@@ -14,16 +14,6 @@
 
 using namespace std;
 
-//Debug printing
-
-#if false
-#define announce() (clog << __FILE__ << ":" << __LINE__ << " " << __func__ << "()" << endl)
-#define show(var) (clog << "    " << #var << " = " << var << endl)
-#else
-#define announce() ((void)0)
-#define show(var) ((void)0)
-#endif
-
 auto is_null     = [](auto* ptr){ return (ptr==nullptr); };
 auto is_not_null = [](auto* ptr){ return (ptr!=nullptr); };
 
@@ -171,13 +161,6 @@ class Dungeon {
     }
 
     vector<Space*> carve_hallway(vector<Space*> const& first, vector<Space*> const& second, Dir dir, int lat_begin, int lat_end) {
-        announce();
-        show(first.size());
-        show(second.size());
-        show(dir);
-        show(lat_begin);
-        show(lat_end);
-
         auto first_data  = get_partition_data(first,  dir, lat_begin, lat_end, [=](const auto& v){return v.end_longitude(dir);}, greater<void>{});
         auto second_data = get_partition_data(second, dir, lat_begin, lat_end, [=](const auto& v){return v.begin_longitude(dir);},  less<void>{});
 
@@ -284,9 +267,6 @@ class Dungeon {
 
         // Verify that carve_hallway() succeeded/
         assert(halls.size() > 0);
-        //assert(hall->data.hall.dir == split_dir);
-        //assert(hall->data.hall.begin > rect.begin_longitude(split_dir));
-        //assert((hall->data.hall.end) < rect.end_longitude(split_dir)); // TODO: parens needed; gcc glitch?
 
         // Append first and second to rv.
         rv.reserve(first.size() + second.size() + 1);
@@ -327,10 +307,6 @@ class Dungeon {
     }
 
     vector<Space*> try_split(Rect const rect, int const depth) {
-        announce();
-        show(rect);
-        show(depth);
-
         vector<Space*> rv;
 
         int area_width = rect.end_c - rect.begin_c;
@@ -393,9 +369,6 @@ class Dungeon {
     }
 
     Space make_room(Rect const rect) {
-        announce();
-        show(rect);
-
         const int area_width = rect.width() - 1; // -1 to give room for hallways.
         const int area_height = rect.height() - 1;
 
@@ -441,10 +414,6 @@ class Dungeon {
     }
 
     vector<Space*> carve_rooms(Rect const rect, int depth) {
-        announce();
-        show(rect);
-        show(depth);
-
         vector<Space*> rv;
 
         // Unless we're at the depth limit, try to split.
@@ -462,6 +431,9 @@ class Dungeon {
     }
 
     Space* add_space(Space sp) {
+        if (rooms.size() == rooms.capacity()) {
+            throw logic_error("Need more space for rooms!");
+        }
         rooms.push_back(move(sp));
         return &rooms.back();
     }
