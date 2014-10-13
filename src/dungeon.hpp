@@ -5,7 +5,6 @@
 
 #include <algorithm>
 #include <iterator>
-#include <list>
 #include <utility>
 #include <vector>
 #include <functional>
@@ -58,7 +57,8 @@ vector<Space*> get_partition_data(vector<Space*> const& spaces, Dir dir, int lat
 class Dungeon {
     friend class DungeonTests;
 
-    list<Space> rooms;
+    using SpaceVec = vector<Space>;
+    SpaceVec rooms;
 
     int width = 0;
     int height = 0;
@@ -481,9 +481,23 @@ public:
         width = w;
         height = h;
 
-        rooms.clear();
+        auto intpow = [](int a, int e){
+            int rv = 1;
+            for (int i=0; i<e; ++i) {
+                rv *= a;
+            }
+            return rv;
+        };
+
+        auto cap = intpow(2,depth_max-1) * 4 - 3;
+
+        rooms.~SpaceVec();
+        new (&rooms) SpaceVec;
+        rooms.reserve(cap);
 
         carve_rooms(Rect{0, height, 0, width}, 1);
+
+        assert(rooms.capacity() == cap);
     }
 
     template <typename Out>
@@ -566,7 +580,7 @@ public:
         return height;
     }
 
-    list<Space> const& get_spaces() const {
+    SpaceVec const& get_spaces() const {
         return rooms;
     }
 
