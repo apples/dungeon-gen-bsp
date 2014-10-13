@@ -59,6 +59,7 @@ struct DungeonTests {
         dat.dir_loc = bc;
         dat.begin = br;
         dat.end = er;
+        dat.thickness = 1;
 
         Space space;
         space.type = SpaceType::HALL;
@@ -80,6 +81,7 @@ struct DungeonTests {
         dat.dir_loc = br;
         dat.begin = bc;
         dat.end = ec;
+        dat.thickness = 1;
 
         Space space;
         space.type = SpaceType::HALL;
@@ -106,11 +108,78 @@ struct DungeonTests {
 };
 #undef TEST
 
-int main() {
+void printit(Dungeon& dung) {
+    auto tiles = dung.print_tiles();
+
+    for (auto& l : tiles) {
+        cout << l << "\n";
+    }
+    cout << endl;
+}
+
+#include <sstream>
+#include <cstdlib>
+using namespace std;
+
+Dungeon dung;
+
+int main(int argc, char* argv[]) try {
     DungeonTests tests;
 	if (tests.run_all_tests()) {
-		Dungeon dung;
-        dung.go(30,30);
-        dung.print(cout);
+        if (argc < 3) {
+            cout << "NEED W AND H" << endl;
+            return -1;
+        }
+        auto seed = nd_rand();
+        if (argc == 5) {
+            stringstream(string(argv[4])) >> seed;
+            dung.seed(seed);
+            cout << endl << "Seed: " << seed << endl << endl;
+            dung.go(atoi(argv[1]),atoi(argv[2]));
+            printit(dung);
+            if (argc >= 4) {
+                void (Dungeon::*func)(int) = &Dungeon::mult;
+                for (char c : string(argv[3])) {
+                    if (c == '-') {
+                        func = &Dungeon::sub;
+                    } else {
+                        (dung.*func)(c-'0');
+                        func = &Dungeon::mult;
+                    }
+                }
+            }
+            printit(dung);
+        } else {
+            mt19937 seeder (nd_rand());
+            constexpr auto lim = 1000;
+            for (int i=0; i<lim; ++i) {
+                if (i%(lim/100) == 0) {
+                    cout << (i/(lim/100)) << "%" << endl;
+                }
+                auto seed = seeder();
+                dung.seed(seed);
+                //cout << endl << "Seed: " << seed << endl << endl;
+                dung.go(atoi(argv[1]),atoi(argv[2]));
+                //printit(dung);
+                if (argc >= 4) {
+                    void (Dungeon::*func)(int) = &Dungeon::mult;
+                    for (char c : string(argv[3])) {
+                        if (c == '-') {
+                            func = &Dungeon::sub;
+                        } else {
+                            (dung.*func)(c-'0');
+                            func = &Dungeon::mult;
+                        }
+                    }
+                    //printit(dung);
+                }
+            }
+        }
 	}
+} catch (exception const& e) {
+    cerr << "EXCEPTION!" << endl;
+    cerr << e.what() << endl;
+    printit(dung);
+    dung.print_dot(cerr);
+    return -1;
 }
