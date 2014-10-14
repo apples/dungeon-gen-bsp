@@ -2,6 +2,8 @@
 #include "space.hpp"
 #include "nd_rand.hpp"
 #include "better_assert.hpp"
+#include "array_vector.hpp"
+#include "array_view.hpp"
 
 #include <algorithm>
 #include <iterator>
@@ -30,17 +32,16 @@ pair<Iter,Iter> find_bounds_if(Iter b, Iter e, Pred pred) {
 }
 
 template <typename Comp>
-vector<Space*> get_partition_data(vector<Space*>& spaces, Dir dir, int lat_begin, int lat_end, Comp comp) {
+vector<Space*> get_partition_data(ArrayView<Space>& spaces, Dir dir, int lat_begin, int lat_end, Comp comp) {
     vector<Space*> rv (lat_end - lat_begin, nullptr);
-    for (Space* sp : spaces) {
-        assert(sp);
-        auto shape = get_shape(*sp);
+    for (Space& sp : spaces) {
+        auto shape = get_shape(sp);
         for (int i = shape.begin_latitude(dir), ie = shape.end_latitude(dir); i<ie; ++i) {
             assert(i-lat_begin >= 0);
             assert(i-lat_begin < rv.size());
             auto& slot = rv[i-lat_begin];
             if (!slot || comp(shape, get_shape(*slot))) {
-                slot = sp;
+                slot = &sp;
             }
         }
     }
@@ -64,11 +65,14 @@ class Dungeon {
 
     mt19937 rng {nd_rand()};
 
-    pair<Space*,Space*> create_junction(Space* hall, Dir dir, int split_loc) {
+    ArrayView<Space> create_junction(Space* hall, Dir dir, int split_loc) {
         assert(hall);
 
-        // Create new hallway
+        auto junction = add_space(Space{});
         auto newhall = add_space(Space{});
+        auto rv = ArrayView<Space>(newhall,newhall+2);
+
+        // Create new hallway
         newhall->type = SpaceType::HALL;
         newhall->data.hall = hall->data.hall;
 
@@ -99,13 +103,11 @@ class Dungeon {
 
         // Create room between hall and newhall
 
-        auto junction = add_space(Space{});
         junction->type = SpaceType::ROOM;
         junction->data.room.begin_latitude(dir) = split_loc;
         junction->data.room.end_latitude(dir) = split_loc + 1;
         junction->data.room.begin_longitude(dir) = hall->data.hall.dir_loc;
         junction->data.room.end_longitude(dir) = hall->data.hall.dir_loc + 1;
-        junction->neighbors.reserve(3);
 
         // Connect junction to hall and newhall
 
@@ -114,14 +116,14 @@ class Dungeon {
         junction->neighbors.push_back(hall);
         junction->neighbors.push_back(newhall);
 
-        pair<Space*,Space*> rv;
-        rv.first = junction;
-        rv.second = newhall;
         return rv;
     }
 
-    vector<Space*> proc_collision(Space* space, Space* ptr, Dir const dir, int const loc) {
-        vector<Space*> rv;
+    //using ProcCollideResults = vector<Space*>;
+    using ProcCollideResults = ArrayVector<Space*,2>;
+
+    ArrayView<Space> proc_collision(Space* space, Space* ptr, Dir const dir, int const loc) {
+        ArrayView<Space> rv;
 
         switch (ptr->type) {
             case SpaceType::ROOM: {
@@ -130,14 +132,9 @@ class Dungeon {
             } break;
 
             case SpaceType::HALL: {
-                auto junchall = create_junction(ptr, dir, loc);
-                assert(junchall.first);
-                assert(junchall.second);
-                space->neighbors.push_back(junchall.first);
-                junchall.first->neighbors.push_back(space);
-                rv.reserve(2);
-                rv.push_back(junchall.first);
-                rv.push_back(junchall.second);
+                rv = create_junction(ptr, dir, loc);
+                space->neighbors.push_back(&rv[0]);
+                rv[0].neighbors.push_back(space);
             } break;
 
             default: {
@@ -148,7 +145,7 @@ class Dungeon {
         return rv;
     }
 
-    vector<Space*> carve_hallway(vector<Space*>& first, vector<Space*>& second, Dir dir, int lat_begin, int lat_end) {
+    ArrayView<Space> carve_hallway(ArrayView<Space>& first, ArrayView<Space>& second, Dir dir, int lat_begin, int lat_end) {
         auto first_data  = get_partition_data(first,  dir, lat_begin, lat_end, [=](const auto& a, const auto& b){return (a.end_longitude(dir) > b.end_longitude(dir));});
         auto second_data = get_partition_data(second, dir, lat_begin, lat_end, [=](const auto& a, const auto& b){return (a.begin_longitude(dir) < b.begin_longitude(dir));});
 
@@ -197,22 +194,15 @@ class Dungeon {
         hall->data.hall = hd;
 
         // Collide with endpoints.
-        auto j1_ptrs = proc_collision(hall, first_ptr, dir, hd.dir_loc);
-        auto j2_ptrs = proc_collision(hall, second_ptr, dir, hd.dir_loc);
+        auto junc1 = proc_collision(hall, first_ptr, dir, hd.dir_loc);
+        auto junc2 = proc_collision(hall, second_ptr, dir, hd.dir_loc);
 
-        vector<Space*> rv;
-        rv.reserve(j1_ptrs.size() + j2_ptrs.size() + 1);
-
-        rv.push_back(hall);
-        move(begin(j1_ptrs),end(j1_ptrs),back_inserter(rv));
-        move(begin(j2_ptrs),end(j2_ptrs),back_inserter(rv));
-
-        return rv;
+        return ArrayView<Space>(hall, hall + junc1.size() + junc2.size() + 1);
     }
 
     // Small function to avoid code duplication.
-    vector<Space*> try_split_recurse(Dir split_dir, Rect const rect, int const pos, int depth) {
-        vector<Space*> rv;
+    ArrayView<Space> try_split_recurse(Dir split_dir, Rect const rect, int const pos, int depth) {
+        ArrayView<Space> rv;
 
         // Make sure the caller is sane.
         assert(
@@ -238,21 +228,7 @@ class Dungeon {
         assert(halls.size() > 0);
 
         // Append first and second to rv.
-        rv.reserve(first.size() + second.size() + halls.size());
-        move(
-            begin(first),
-            end(first),
-            back_inserter(rv));
-        move(
-            begin(second),
-            end(second),
-            back_inserter(rv));
-
-        // Add halls to rv.
-        move(
-            begin(halls),
-            end(halls),
-            back_inserter(rv));
+        rv = ArrayView<Space>(first.begin(), first.begin() + first.size() + second.size() + halls.size());
 
         return rv;
     }
@@ -275,8 +251,8 @@ class Dungeon {
         return rv;
     }
 
-    vector<Space*> try_split(Rect const rect, int const depth) {
-        vector<Space*> rv;
+    ArrayView<Space> try_split(Rect const rect, int const depth) {
+        ArrayView<Space> rv;
 
         int area_width = rect.end_c - rect.begin_c;
         int area_height = rect.end_r - rect.begin_r;
@@ -382,8 +358,8 @@ class Dungeon {
         return room;
     }
 
-    vector<Space*> carve_rooms(Rect const rect, int depth) {
-        vector<Space*> rv;
+    ArrayView<Space> carve_rooms(Rect const rect, int depth) {
+        ArrayView<Space> rv;
 
         // Unless we're at the depth limit, try to split.
         if (depth < depth_max) {
@@ -394,7 +370,9 @@ class Dungeon {
         }
 
         // We've failed to split, so just make a single room.
-        rv.push_back(add_space(make_room(rect)));
+        auto room = add_space(make_room(rect));
+
+        rv = ArrayView<Space>(room,room+1);
 
         return rv;
     }
@@ -435,7 +413,9 @@ public:
         rooms.clear();
         rooms.reserve(cap);
 
-        carve_rooms(Rect{0, height, 0, width}, 1);
+        auto all = carve_rooms(Rect{0, height, 0, width}, 1);
+
+        assert(all.begin() == rooms.begin());
 
         assert(rooms.capacity() == cap);
     }
