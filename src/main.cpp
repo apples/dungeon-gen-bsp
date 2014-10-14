@@ -119,9 +119,19 @@ void printit(Dungeon& dung) {
 
 #include <sstream>
 #include <cstdlib>
+#include <chrono>
 using namespace std;
+using namespace std::chrono;
 
 Dungeon dung;
+
+template <typename F>
+auto bench(F&& f) {
+    auto start = high_resolution_clock::now();
+    f();
+    auto end = high_resolution_clock::now();
+    return (end-start);
+}
 
 int main(int argc, char* argv[]) try {
     DungeonTests tests;
@@ -134,8 +144,26 @@ int main(int argc, char* argv[]) try {
         if (argc == 5) {
             stringstream(string(argv[4])) >> seed;
         }
-        dung.seed(seed);
         cout << endl << "Seed: " << seed << endl << endl;
+        duration<double,milli> mint {};
+        duration<double,milli> maxt {};
+        duration<double,milli> avg {};
+        constexpr auto loops = 1000;
+        for (int i=0; i<loops; ++i) {
+            auto t = bench([&]{dung.go(atoi(argv[1]),atoi(argv[2]));});
+            if (i==0 || t<mint) {
+                mint = t;
+            }
+            if (i==0 || t>maxt) {
+                maxt = t;
+            }
+            avg += t;
+        }
+        avg /= loops;
+        cout << "mint= " << mint.count() << endl;
+        cout << "avg=  " << avg.count() << endl;
+        cout << "maxt= " << maxt.count() << endl;
+        dung.seed(seed);
         dung.go(atoi(argv[1]),atoi(argv[2]));
         printit(dung);
         if (argc >= 4) {
@@ -158,31 +186,3 @@ int main(int argc, char* argv[]) try {
     dung.print_dot(cerr);
     return -1;
 }
-######################.....#
-######################.....#
-##.........###.....###.....#
-##.........###.....###.....#
-##.........###.....###.....#
-##.........###.....###.....#
-##.........###.....-.-.....#
-##########|###.....#|#.....#
-##########|###.....#|#.....#
-##########|#########|#.....#
-...........#########|#.....#
-...........#########|#######
-...........#########|#######
-...........#########|#######
-...........-----.-.....#####
-...........#####|#.....#####
-...........#####|#.....#####
-################|#.....#####
-################|#.....#####
-################|###########
-################|###########
-################|###########
-...........#####.......#####
-...........#####.......#####
-...........-----.......#####
-...........#####.......#####
-...........#####.......#####
-############################

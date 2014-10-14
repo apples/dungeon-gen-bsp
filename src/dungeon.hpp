@@ -7,10 +7,13 @@
 #include <iterator>
 #include <utility>
 #include <vector>
+#include <list>
 #include <functional>
 #include <random>
 #include <stdexcept>
 #include <iostream>
+#include <future>
+#include <mutex>
 
 using namespace std;
 
@@ -26,8 +29,8 @@ pair<Iter,Iter> find_bounds_if(Iter b, Iter e, Pred pred) {
     return rv;
 }
 
-template <typename GetLong, typename Comp>
-vector<Space*> get_partition_data(vector<Space*> const& spaces, Dir dir, int lat_begin, int lat_end, GetLong get_long, Comp comp) {
+template <typename Comp>
+vector<Space*> get_partition_data(vector<Space*>& spaces, Dir dir, int lat_begin, int lat_end, Comp comp) {
     vector<Space*> rv (lat_end - lat_begin, nullptr);
     for (Space* sp : spaces) {
         assert(sp);
@@ -36,7 +39,7 @@ vector<Space*> get_partition_data(vector<Space*> const& spaces, Dir dir, int lat
             assert(i-lat_begin >= 0);
             assert(i-lat_begin < rv.size());
             auto& slot = rv[i-lat_begin];
-            if (!slot || comp(get_long(shape), get_long(get_shape(*slot)))) {
+            if (!slot || comp(shape, get_shape(*slot))) {
                 slot = sp;
             }
         }
@@ -57,19 +60,9 @@ class Dungeon {
     int room_height_min = 3;
     double room_ratio_min = 0.3;
 
-    int depth_max = 5;
+    int depth_max = 15;
 
     mt19937 rng {nd_rand()};
-
-    Space* room_at(int r, int c) {
-        for (Space& sp : rooms) {
-            auto rect = get_shape(sp);
-            if (rect.begin_r <= r && rect.end_r > r && rect.begin_c <= c && rect.end_c > c) {
-                return &sp;
-            }
-        }
-        return nullptr;
-    }
 
     pair<Space*,Space*> create_junction(Space* hall, Dir dir, int split_loc) {
         assert(hall);
@@ -80,9 +73,6 @@ class Dungeon {
         newhall->data.hall = hall->data.hall;
 
         // Cut connections on end of hall, connect to newhall
-
-        vector<decltype(begin(hall->neighbors))> to_erase;
-        to_erase.reserve(hall->neighbors.size());
 
         for (auto iter : defer_range(hall->neighbors)) {
             Space* sp = *iter;
@@ -97,12 +87,9 @@ class Dungeon {
                 }
                 newhall->neighbors.push_back(sp);
                 sp->neighbors.push_back(newhall);
-                to_erase.push_back(iter);
+                hall->neighbors.erase(iter);
+                break;
             }
-        }
-
-        for (auto iter : reverse_range(to_erase)) {
-            hall->neighbors.erase(iter);
         }
 
         // Physically separate hall and newhall
@@ -118,6 +105,7 @@ class Dungeon {
         junction->data.room.end_latitude(dir) = split_loc + 1;
         junction->data.room.begin_longitude(dir) = hall->data.hall.dir_loc;
         junction->data.room.end_longitude(dir) = hall->data.hall.dir_loc + 1;
+        junction->neighbors.reserve(3);
 
         // Connect junction to hall and newhall
 
@@ -132,9 +120,8 @@ class Dungeon {
         return rv;
     }
 
-    vector<Space*> proc_collision(Space* space, Space* ptr, Dir const dir, int const loc){
+    vector<Space*> proc_collision(Space* space, Space* ptr, Dir const dir, int const loc) {
         vector<Space*> rv;
-        rv.reserve(2);
 
         switch (ptr->type) {
             case SpaceType::ROOM: {
@@ -148,6 +135,7 @@ class Dungeon {
                 assert(junchall.second);
                 space->neighbors.push_back(junchall.first);
                 junchall.first->neighbors.push_back(space);
+                rv.reserve(2);
                 rv.push_back(junchall.first);
                 rv.push_back(junchall.second);
             } break;
@@ -160,9 +148,9 @@ class Dungeon {
         return rv;
     }
 
-    vector<Space*> carve_hallway(vector<Space*> const& first, vector<Space*> const& second, Dir dir, int lat_begin, int lat_end) {
-        auto first_data  = get_partition_data(first,  dir, lat_begin, lat_end, [=](const auto& v){return v.end_longitude(dir);}, greater<void>{});
-        auto second_data = get_partition_data(second, dir, lat_begin, lat_end, [=](const auto& v){return v.begin_longitude(dir);},  less<void>{});
+    vector<Space*> carve_hallway(vector<Space*>& first, vector<Space*>& second, Dir dir, int lat_begin, int lat_end) {
+        auto first_data  = get_partition_data(first,  dir, lat_begin, lat_end, [=](const auto& a, const auto& b){return (a.end_longitude(dir) > b.end_longitude(dir));});
+        auto second_data = get_partition_data(second, dir, lat_begin, lat_end, [=](const auto& a, const auto& b){return (a.begin_longitude(dir) < b.begin_longitude(dir));});
 
         auto first_bounds  = find_bounds_if(begin(first_data),  end(first_data),  is_not_null);
         auto second_bounds = find_bounds_if(begin(second_data), end(second_data), is_not_null);
@@ -237,30 +225,11 @@ class Dungeon {
         auto first = carve_rooms(recurse_rects.first, depth+1);
         auto second = carve_rooms(recurse_rects.second, depth+1);
 
-        //assert(room_at(recurse_rects.first.center_r(), recurse_rects.first.center_c()));
-        //assert(room_at(recurse_rects.second.center_r(), recurse_rects.second.center_c()));
-
         // Make sure carve_rooms() succeeded.
         assert(first.size() > 0);
         assert(second.size() > 0);
 
         // Make sure first and second are valid.
-        for (Space* sp : first) {
-            assert(sp);
-            auto r = get_shape(*sp);
-            assert(r.begin_longitude(split_dir) >= rect.begin_longitude(split_dir));
-            assert(r.end_longitude(split_dir) < rect.end_longitude(split_dir));
-            assert(r.begin_latitude(split_dir) >= rect.begin_latitude(split_dir));
-            assert(r.end_latitude(split_dir) < rect.end_latitude(split_dir));
-        }
-        for (Space* sp : second) {
-            assert(sp);
-            auto r = get_shape(*sp);
-            assert(r.begin_longitude(split_dir) >= rect.begin_longitude(split_dir));
-            assert(r.end_longitude(split_dir) < rect.end_longitude(split_dir));
-            assert(r.begin_latitude(split_dir) >= rect.begin_latitude(split_dir));
-            assert(r.end_latitude(split_dir) < rect.end_latitude(split_dir));
-        }
 
         // Carve the hallway.
         auto halls = carve_hallway(first, second, split_dir, rect.begin_latitude(split_dir), rect.end_latitude(split_dir));
@@ -269,7 +238,7 @@ class Dungeon {
         assert(halls.size() > 0);
 
         // Append first and second to rv.
-        rv.reserve(first.size() + second.size() + 1);
+        rv.reserve(first.size() + second.size() + halls.size());
         move(
             begin(first),
             end(first),
@@ -312,8 +281,8 @@ class Dungeon {
         int area_width = rect.end_c - rect.begin_c;
         int area_height = rect.end_r - rect.begin_r;
 
-        const auto vsplit = make_split_data(room_height_min, area_width, rect.begin_r, rect.end_r);
-        const auto hsplit = make_split_data(room_width_min, area_height, rect.begin_c, rect.end_c);
+        auto vsplit = make_split_data(room_height_min, area_width, rect.begin_r, rect.end_r);
+        auto hsplit = make_split_data(room_width_min, area_height, rect.begin_c, rect.end_c);
 
         // If there's nowhere to split, we cannot create any rooms.
         if (vsplit.range + hsplit.range <= 0) { // TODO: can be equal to 0?
@@ -463,8 +432,7 @@ public:
 
         auto cap = intpow(2,depth_max-1) * 4 - 3;
 
-        rooms.~SpaceVec();
-        new (&rooms) SpaceVec;
+        rooms.clear();
         rooms.reserve(cap);
 
         carve_rooms(Rect{0, height, 0, width}, 1);

@@ -3,9 +3,8 @@
 
 #include <random>
 
-#include <windows.h>
-
 #ifdef __MINGW32__
+    #include <windows.h>
     inline std::random_device::result_type nd_rand()
     {
         std::random_device::result_type rv;
@@ -17,7 +16,6 @@
 
         return rv;
     }
-
 #else
     inline std::random_device::result_type nd_rand()
     {
