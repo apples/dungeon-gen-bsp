@@ -46,7 +46,7 @@ struct _asserter {
     opdef(|)
     opdef(&)
     opdef(^)
-    //opdef(,)
+    //TODO: opdef(,) ?
 
 #undef opdef
 

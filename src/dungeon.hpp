@@ -4,6 +4,7 @@
 #include "better_assert.hpp"
 #include "array_vector.hpp"
 #include "array_view.hpp"
+#include "thread_worker.hpp"
 
 #include <algorithm>
 #include <iterator>
@@ -64,6 +65,8 @@ class Dungeon {
     int depth_max = 15;
 
     mt19937 rng {nd_rand()};
+
+    ThreadWorker<vector<Space*>> parter;
 
     ArrayView<Space> create_junction(Space* hall, Dir dir, int split_loc) {
         assert(hall);
@@ -146,8 +149,20 @@ class Dungeon {
     }
 
     ArrayView<Space> carve_hallway(ArrayView<Space>& first, ArrayView<Space>& second, Dir dir, int lat_begin, int lat_end) {
-        auto first_data  = get_partition_data(first,  dir, lat_begin, lat_end, [=](const auto& a, const auto& b){return (a.end_longitude(dir) > b.end_longitude(dir));});
-        auto second_data = get_partition_data(second, dir, lat_begin, lat_end, [=](const auto& a, const auto& b){return (a.begin_longitude(dir) < b.begin_longitude(dir));});
+        auto first_comp = [=](const auto& a, const auto& b){return (a.end_longitude(dir) > b.end_longitude(dir));};
+        auto first_work = [&]{return get_partition_data(first,  dir, lat_begin, lat_end, first_comp);};
+
+        auto second_comp = [=](const auto& a, const auto& b){return (a.begin_longitude(dir) < b.begin_longitude(dir));};
+        auto second_work = [&]{return get_partition_data(second,  dir, lat_begin, lat_end, second_comp);};
+
+        #ifdef DUNGEON_PARALLEL_PARTITION
+            auto first_data_f  = parter.do_task(first_work);
+            auto second_data = second_work();
+            auto first_data = first_data_f.get();
+        #else
+            auto second_data = second_work();
+            auto first_data = first_work();
+        #endif
 
         auto first_bounds  = find_bounds_if(begin(first_data),  end(first_data),  is_not_null);
         auto second_bounds = find_bounds_if(begin(second_data), end(second_data), is_not_null);
@@ -168,7 +183,7 @@ class Dungeon {
 
         assert(loc >= 0);
         assert(loc < first_data.size());
-        auto  first_ptr =  first_data[loc];
+        auto  first_ptr = first_data[loc];
 
         assert(loc >= 0);
         assert(loc < second_data.size());
