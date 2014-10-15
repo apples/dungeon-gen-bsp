@@ -148,7 +148,7 @@ int main(int argc, char* argv[]) try {
         duration<double,milli> mint {};
         duration<double,milli> maxt {};
         duration<double,milli> avg {};
-        constexpr auto loops = 1000;
+        constexpr auto loops = 10000;
         for (int i=0; i<loops; ++i) {
             auto t = bench([&]{dung.go(atoi(argv[1]),atoi(argv[2]));});
             if (i==0 || t<mint) {
@@ -183,6 +183,6 @@ int main(int argc, char* argv[]) try {
     cerr << "EXCEPTION!" << endl;
     cerr << e.what() << endl;
     printit(dung);
-    dung.print_dot(cerr);
+    //dung.print_dot(cerr);
     return -1;
 }

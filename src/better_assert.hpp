@@ -5,6 +5,18 @@
 #include <string>
 #include <sstream>
 #include <vector>
+#include <type_traits>
+
+namespace _assert_defaults {
+    template <typename T,
+        typename = std::enable_if_t<
+            !std::is_same<std::decay_t<T>,char const*>::value,
+            void>>
+    std::ostream& operator<<(std::ostream& out, T&& t) {
+        out << "???";
+        return out;
+    }
+}
 
 template <typename B>
 struct _asserter {
@@ -19,6 +31,7 @@ struct _asserter {
 
     template <typename T>
     _asserter& operator->*(T const& t) {
+        using namespace _assert_defaults;
         ss << t;
         return *this;
     }
@@ -26,6 +39,7 @@ struct _asserter {
 #define opdef(op) \
     template <typename T> \
     _asserter& operator op (T const& t) { \
+        using namespace _assert_defaults; \
         ss << " " #op " " << t; \
         return *this; \
     }
@@ -46,7 +60,13 @@ struct _asserter {
     opdef(|)
     opdef(&)
     opdef(^)
-    //TODO: opdef(,) ?
+
+    template <typename T>
+    _asserter& operator , (T const& t) {
+        using namespace _assert_defaults;
+        ss << " , " << t;
+        return *this;
+    }
 
 #undef opdef
 
@@ -71,9 +91,15 @@ struct _asserter {
 #undef assert
 
 #ifndef BETTER_ASSERT_OFF
-#define assert(cond) ((_asserter<decltype(cond)>(#cond,__FILE__,__LINE__,(cond)) ->* cond).check())
+
+    #define assert(...) ((_asserter<decltype(__VA_ARGS__)>(#__VA_ARGS__,__FILE__,__LINE__,(__VA_ARGS__)) ->* __VA_ARGS__).check())
+    #define assert_if(cond) if (cond)
+
 #else
-#define assert(cond) ((void)0)
+
+    #define assert(cond) ((void)0)
+    #define assert_if(cond) if (false)
+
 #endif
 
 #endif // BETTER_ASSERT_HPP

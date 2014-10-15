@@ -1,8 +1,11 @@
 #ifndef SPACE_HPP
 #define SPACE_HPP
 
+#include "ranges.hpp"
+
 #include <iostream>
 #include <stdexcept>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -116,13 +119,43 @@ struct Rect {
         }
     }
 
+    auto range_longitude(Dir dir) const {
+        return number_range(begin_longitude(dir),end_longitude(dir));
+    }
+
+    auto range_latitude(Dir dir) const {
+        return number_range(begin_latitude(dir),end_latitude(dir));
+    }
+
+    int len_longitude(Dir dir) const {
+        return (end_longitude(dir)-begin_longitude(dir));
+    }
+
+    int len_latitude(Dir dir) const {
+        return (end_latitude(dir)-begin_latitude(dir));
+    }
+
     std::pair<Rect,Rect> split(Dir dir, int pos) const {
         std::pair<Rect,Rect> rv (*this,*this);
         rv.first.end_longitude(dir) = pos;
         rv.second.begin_longitude(dir) = pos;
         return rv;
     }
+
+    bool contains(Rect const& other) const {
+        return (
+            begin_r <= other.begin_r &&
+            end_r >= other.end_r &&
+            begin_c <= other.begin_c &&
+            end_c >= other.end_c);
+    }
 };
+
+inline bool operator==(Rect const& a, Rect const& b) {
+    return (
+        std::tie(a.begin_r,a.end_r,a.begin_c,a.end_c) ==
+        std::tie(b.begin_r,b.end_r,b.begin_c,b.end_c));
+}
 
 inline std::ostream& operator<<(std::ostream& out, Rect const& rect) {
     out << "Rect{"
