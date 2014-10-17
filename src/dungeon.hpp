@@ -25,10 +25,10 @@ auto is_not_null = [](auto* ptr){ return (ptr!=nullptr); };
 
 //Cool algorithm
 template <typename Iter, typename Pred>
-pair<Iter,Iter> find_bounds_if(Iter b, Iter e, Pred pred) {
+pair<Iter,Iter> find_partition_bounds(Iter b, Iter e, Pred pred) {
     pair<Iter,Iter> rv;
-    rv.first = find_if(b, e, pred);
-    rv.second = find_if(reverse(e), reverse(b), pred).base();
+    rv.first = partition_point(b, e, pred);
+    rv.second = partition_point(reverse(e), reverse(b), pred).base();
     return rv;
 }
 
@@ -159,6 +159,7 @@ class Dungeon {
     int depth_max = 15;
 
     mt19937 rng {nd_rand()};
+    uniform_int_distribution<int> dist;
 
     vector<Space*> cache;
     size_t cache_pos = 0;
@@ -187,6 +188,11 @@ class Dungeon {
         return rv;
     }
 
+    int roll_rng(int a, int b) {
+        auto params = uniform_int_distribution<int>::param_type(a,b);
+        return dist(rng,params);
+    }
+
     ArrayView<Space> create_junction(Space* hall, Dir dir, int split_loc) {
         assert(hall);
 
@@ -200,23 +206,23 @@ class Dungeon {
 
         // Cut connections on end of hall, connect to newhall
 
-        for (auto iter : defer_range(hall->neighbors)) {
-            Space* sp = *iter;
-            assert(sp);
+        auto iter = find_if(begin(hall->neighbors),end(hall->neighbors), [=](Space* sp){
             auto rect = get_shape(*sp);
-            if (rect.begin_latitude(dir) == hall->data.hall.end) {
-                auto sp_iter = find(begin(sp->neighbors),end(sp->neighbors), hall);
-                if (sp_iter != end(sp->neighbors)) {
-                    sp->neighbors.erase(sp_iter);
-                } else {
-                    assert(false);
-                }
-                newhall->neighbors.push_back(sp);
-                sp->neighbors.push_back(newhall);
-                hall->neighbors.erase(iter);
-                break;
-            }
-        }
+            return (rect.begin_latitude(dir) == hall->data.hall.end);
+        });
+
+        assert(sp);
+
+        Space* sp = *iter;
+
+        auto sp_iter = find(begin(sp->neighbors),end(sp->neighbors), hall);
+        assert(sp_iter != end(sp->neighbors));
+
+        sp->neighbors.erase(sp_iter);
+        sp->neighbors.push_back(newhall);
+
+        newhall->neighbors.push_back(sp);
+        hall->neighbors.erase(iter);
 
         // Physically separate hall and newhall
 
@@ -275,8 +281,8 @@ class Dungeon {
 
         assert(first_data.size() == second_data.size());
 
-        auto first_bounds  = find_bounds_if(begin(first_data),  end(first_data),  is_not_null);
-        auto second_bounds = find_bounds_if(begin(second_data), end(second_data), is_not_null);
+        auto first_bounds  = find_partition_bounds(begin(first_data),  end(first_data),  is_null);
+        auto second_bounds = find_partition_bounds(begin(second_data), end(second_data), is_null);
 
         assert(&*first_bounds.first < &*first_bounds.second);
         assert(&*second_bounds.first < &*second_bounds.second);
@@ -291,8 +297,7 @@ class Dungeon {
 
         assert(b-a > 0);
 
-        uniform_int_distribution<int> roll (a,b-1);
-        int loc = roll(rng);
+        int loc = roll_rng(a,b-1);
 
         assert(loc >= 0);
         assert(loc < first_data.size());
@@ -517,9 +522,7 @@ class Dungeon {
             return area;
         }
 
-        uniform_int_distribution<int> roll (0, vsplit.range + hsplit.range - 1);
-
-        int split = roll(rng);
+        int split = roll_rng(0, vsplit.range + hsplit.range - 1);
         Dir split_dir = Dir::VERT;
 
         if (split >= vsplit.range) {
@@ -541,20 +544,20 @@ class Dungeon {
         int center_long, int center_lat,
         Dir free_dir
     ) {
-        uniform_int_distribution<int> roll_lat_len (
+        auto roll_lat_len = roll_rng(
             min_lat,
             min(max_lat, int(max_long/room_ratio_min)));
 
-        const int lat_len = roll_lat_len(rng);
+        const int lat_len = roll_lat_len;
         const int lat_pos = center_lat - lat_len/2;
 
         auto min_long_len = int(lat_len * room_ratio_min);
 
-        uniform_int_distribution<int> roll_long_len (
+        auto roll_long_len = roll_rng(
             max(min_long,min_long_len),
             max_long);
 
-        const int long_len = roll_long_len(rng);
+        const int long_len = roll_long_len;
         const int long_pos = center_long - long_len/2;
 
         Rect rd;
